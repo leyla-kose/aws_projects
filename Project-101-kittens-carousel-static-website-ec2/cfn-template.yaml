@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: |
+  This template launches an EC2 to deploy web app using CloudFormation.
+
+Resources:
+  CFNInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-08e4e35cccc6189f4
+      InstanceType: t2.micro
+      KeyName: firstkey 
+      SecurityGroups: 
+        - ssh+http
+      Tags:
+        -
+          Key: Name
+          Value: Cfn-Instance
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo yum update -y
+          sudo yum install httpd -y
+          sudo yum -get install wget
+          cd /var/www/html
+          wget https://raw.githubusercontent.com/leyla-kose/my-projects/main/Project-101-kittens-carousel-static-website-ec2/static-web/index.html
+          wget https://raw.githubusercontent.com/leyla-kose/my-projects/main/Project-101-kittens-carousel-static-website-ec2/static-web/cat0.jpg
+          wget https://raw.githubusercontent.com/leyla-kose/my-projects/main/Project-101-kittens-carousel-static-website-ec2/static-web/cat1.jpg
+          wget https://raw.githubusercontent.com/leyla-kose/my-projects/main/Project-101-kittens-carousel-static-website-ec2/static-web/cat2.jpg
+          wget https://raw.githubusercontent.com/leyla-kose/my-projects/main/Project-101-kittens-carousel-static-website-ec2/static-web/cat3.png
+          systemctl enable httpd
+          systemctl start httpd
+          
