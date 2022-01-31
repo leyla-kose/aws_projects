@@ -1,10 +1,10 @@
 AWSTemplateFormatVersion: 2010-09-09
 
 Description: |
-  This template launches an EC2 to deploy web app using CloudFormation.
+  This template launches an Elastic Compute Cloud (EC2) Instance to deploy a static website application using AWS Cloudformation Service.
 
 Resources:
-  CFNInstance:
+  WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
       ImageId: ami-08e4e35cccc6189f4
@@ -15,7 +15,7 @@ Resources:
       Tags:
         -
           Key: Name
-          Value: Cfn-Instance
+          Value: Web_Server_of_StackName
       UserData: 
         Fn::Base64: !Sub |
           #!/bin/bash
@@ -30,4 +30,7 @@ Resources:
           wget https://raw.githubusercontent.com/leyla-kose/my-projects/main/Project-101-kittens-carousel-static-website-ec2/static-web/cat3.png
           systemctl enable httpd
           systemctl start httpd
-          
+Outputs:
+  WebsiteUrl:
+    Description: Kittens Carousel's URL address
+    Value: !GetAtt WebServerInstance.PublicDnsName         
