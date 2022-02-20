@@ -1,0 +1,4 @@
+crontab -e
+
+*/5 * * * * sudo /home/ec2-user/backup.sh
+
