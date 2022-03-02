@@ -152,7 +152,7 @@ Resources:
       AutoMinorVersionUpgrade: true
       DBInstanceClass: db.t2.micro # Required
       DBInstanceIdentifier: leyla-database
-      DBName: claruswayphonebook
+      DBName: clarusway_phonebook
       DBSecurityGroups:
         - !Ref myDBSecurityGroup
       Engine: MySQL
