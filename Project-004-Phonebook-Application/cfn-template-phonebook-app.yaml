@@ -1,144 +1,174 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: |
-  This AWS Cloudformation template aims to create a phonebook application in Python and deployed as a web application with Flask on AWS Application Load Balancer with Auto Scaling Group of Elastic Compute Cloud (EC2) Instances and Relational Database Service (RDS) using AWS Cloudformation Service.
-  
+  CloudFormation Template for Phonebook Application. This template creates Application 
+  Load Balancer with Auto Scaling Group of Amazon Linux 2 ( ami-048ff3da02834afdc) EC2 Instances 
+  which host Python Flask Web Application. EC2 instances are placed within 
+  WebServerSecurityGroup which allows http (80) connections only from ALBSecurityGroup, 
+  and allows tcp(3306) connections only within itself. RDS DB instance is placed within 
+  WebServerSecurityGroup so that Database Server can communicate with Web Servers. 
+  Application Load Balancer is placed within ALBSecurityGroup which allows http (80) 
+  connections from anywhere. WebServerASG Auto Scaling Group is using the WebServerLT 
+  Launch Template in order to spin up instances needed. WebServerLT Launch Template is 
+  configured to prepare Python Flask environment on EC2, and to deploy Phonebook 
+  Application on Flask Server after downloading the app code from Github repository.
+
 Parameters:
   myVPC:
     Description: Select your VPC
     Type: AWS::EC2::VPC::Id
-
-  mySubnets:
-    Description: Select at least 2 subnets
-    Type: List<AWS::EC2::Subnet::Id>
-
   myKP:
     Description: Select your Key
     Type: AWS::EC2::KeyPair::KeyName
-
-Mappings:
-  RegionImageMap:
-    us-east-1:
-      AMI: ami-0dc2d3e4c0f9ebd18
-    us-east-2:
-      AMI: ami-0233c2d874b811deb
-    us-west-1:
-      AMI: ami-0ed05376b59b90e46
-    us-west-2:
-      AMI: ami-0dc8f589abe99f538
-    eu-west-1:
-      AMI: ami-058b1b7fe545997ae
+  mySubnets:
+    Description: Select at least 2 subnets
+    Type: List<AWS::EC2::Subnet::Id>
   
 Resources:
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for ALB, supporting HTTP connection. # Required
+      VpcId: !Ref myVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80  
           ToPort: 80
           CidrIp: 0.0.0.0/0
-      VpcId: !Ref myVPC
 
-  myALB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      SecurityGroups:
-        - !GetAtt ALBSecurityGroup.GroupId
-      Subnets: !Ref mySubnets
-      Type: application
-  
-  myTG:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      HealthCheckIntervalSeconds: 10
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 5
-      Port: 80
-      Protocol: HTTP
-      UnhealthyThresholdCount: 3
-      VpcId: !Ref myVPC
-  
-  myListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions: # Required
-        - Type: forward
-          TargetGroupArn: !Ref myTG
-      LoadBalancerArn: !Ref myALB # Required
-      Port: 80
-      Protocol: HTTP
-  
-  EC2SecurityGroup:
+  myEC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: EC2 security group, enabling secure SSH connection and HTTP connection from ALBSecurityGroup. # Required
+      VpcId: !Ref myVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp: 0.0.0.0/0
-        - !GetAtt ALBSecurityGroup.GroupId
-      VpcId: !Ref myVPC
-  
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+    
   myLT:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !FindInMap 
-         - RegionImageMap
-         - !Ref AWS::Region
-         - AMI
+        ImageId: ami-048ff3da02834afdc
         InstanceType: t2.micro
         KeyName: !Ref myKP
         SecurityGroupIds:
-          - !GetAtt EC2SecurityGroup.GroupId
-        UserData: !Base64 |
-          #! /bin/bash
-          yum update -y
-          yum install git -y
-          pip3 install flask 
-          pip3 install flask-mysql
-          pip3 install sqlalchemy
-          pip3 install flask-SQLAlchemy
-          FOLDER="https://github.com/leyla-kose/aws_projects/tree/main/Project-004-Phonebook-Application"
-          wget FOLDER/phonebook-app.py
-          mkdir templates && cd templates
-          wget FOLDER/templates/add-update.html
-          wget FOLDER/templates/delete.html
-          wget FOLDER/templates/index.html
+          - !GetAtt myEC2SecurityGroup.GroupId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub Web Server of ${AWS::StackName} Stack
+        UserData: 
+          Fn::Base64: 
+            !Sub
+              - |
+                #! /bin/bash
 
-          python3 app-with-mysql.py
+                yum update -y
+                pip3 install flask 
+                pip3 install flask-mysql
+                pip3 install sqlalchemy
+                pip3 install flask-SQLAlchemy
+                cd /home/ec2-user
+                echo "${MyDBURI}" > /home/ec2-user/dbserver.endpoint
+                wget https://raw.githubusercontent.com/leyla-kose/aws_projects/main/Project-004-Phonebook-Application/phonebook-app.py
+                mkdir templates 
+                cd templates
+                wget https://raw.githubusercontent.com/leyla-kose/aws_projects/main/Project-004-Phonebook-Application/templates/add-update.html
+                wget https://raw.githubusercontent.com/leyla-kose/aws_projects/main/Project-004-Phonebook-Application/templates/delete.html
+                wget https://raw.githubusercontent.com/leyla-kose/aws_projects/main/Project-004-Phonebook-Application/templates/index.html
+                cd ..
+                python3 phonebook-app.py
+              - MyDBURI: !GetAtt myDBInstance.Endpoint.Address
 
+  myTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      UnhealthyThresholdCount: 3
+      HealthyThresholdCount: 2
+      VpcId: !Ref myVPC
 
-
-
-  
+  myALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internet-facing
+      SecurityGroups:
+        - !GetAtt ALBSecurityGroup.GroupId
+      Subnets: !Ref mySubnets
+      Type: application
+   
+  myListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions: # Required
+        - TargetGroupArn: !Ref myTG
+          Type: forward
+      LoadBalancerArn: !Ref myALB # Required
+      Port: 80
+      Protocol: HTTP
   
   myASG:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      AvailabilityZones: !GetAZs 
-      DesiredCapacity: "2"
-      HealthCheckGracePeriod: 90
+      AvailabilityZones: 
+        !GetAZs ""
+      DesiredCapacity: 2
+      HealthCheckGracePeriod: 300
       HealthCheckType: ELB
       LaunchTemplate:
         LaunchTemplateId: !Ref myLT
-        Version: "1"
-      MaxSize: "3" # Required
-      MinSize: "1" # Required
+        Version: !GetAtt myLT.LatestVersionNumber
+      MaxSize: 3 # Required
+      MinSize: 1 # Required
       TargetGroupARNs:
         - !Ref myTG
-  
-  myCPUPolicy:
-    Type: AWS::AutoScaling::ScalingPolicy
-    Properties:
-      AutoScalingGroupName: !Ref myASG  # Required
-      PolicyType: TargetTrackingScaling
-      TargetTrackingConfiguration:
-        PredefinedMetricSpecification:
-          PredefinedMetricType: ASGAverageCPUUtilization
-        TargetValue: 60.0
 
+  
+  myDBSecurityGroup:
+    Type: AWS::RDS::DBSecurityGroup
+    Properties:
+      GroupDescription: Security group of RDS # Required
+      DBSecurityGroupIngress: # Required
+        - CIDRIP: 0.0.0.0/0
+        - EC2SecurityGroupId: !GetAtt myEC2SecurityGroup.GroupId
+      
+  
+  myDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 20
+      BackupRetentionPeriod: 0
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      DBInstanceClass: db.t2.micro # Required
+      DBInstanceIdentifier: leyla-database
+      DBName: claruswayphonebook
+      DBSecurityGroups:
+        - !Ref myDBSecurityGroup
+      Engine: MySQL
+      EngineVersion: 8.0.19
+      MasterUserPassword: Clarusway_1
+      MasterUsername: admin
+      Port: 3306
+      PubliclyAccessible: true
+      
 
 Outputs:
+  AppUrl:
+    Description: URL of the ALB
+    Value: !Join 
+       - ''
+       - - 'http://'
+         - !GetAtt myALB.DNSName
+
+
