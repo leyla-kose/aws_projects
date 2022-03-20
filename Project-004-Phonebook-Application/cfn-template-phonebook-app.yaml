@@ -151,7 +151,7 @@ Resources:
       AllowMajorVersionUpgrade: false
       AutoMinorVersionUpgrade: true
       DBInstanceClass: db.t2.micro # Required
-      DBInstanceIdentifier: leyla-database
+      DBInstanceIdentifier: leyla-DB
       DBName: clarusway_phonebook
       DBSecurityGroups:
         - !Ref myDBSecurityGroup
